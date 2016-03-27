@@ -76,6 +76,7 @@ struct CliParams {
     bool verbose; /* true if verbose output */
     std::wstring outputFileName; /* file name to write results, or empty string */
     std::wstring cmdLine; /* The rest of command line options combined in a string */
+	std::wstring progName; /* Isolated program name to create */
 };
 
 /* Returns true on success, false if parsing failed */
@@ -153,12 +154,17 @@ bool ParseArgv(int argc, wchar_t *argv[], CliParams &result) {
         std::wcerr << "Missing program name" << std::endl;
         return false;
     }
-    result.cmdLine = arguments[argNo];
-    /* Concatenate with the rest of arguments */
+
+    result.progName = arguments[argNo];
+
+    result.cmdLine = result.progName;
+    /* Concatenate all arguments into one line */
     for (int i = argNo + 1; i < argc; i++) {
         result.cmdLine += L" " + arguments[i];
     }
-
+    /* For BAT files, the program name should be "cmd.exe /c",
+     otherwise it might not work correctly */
+    // TODO
     return true;
 }
 
@@ -171,17 +177,13 @@ int wmain(int argc, wchar_t* argv[]) {
         UsageAndExit(argv);
     }
 
-    //std::wcout << "DEBUG: Output file " << 
-    //    (params.outputFileName.length() == 0 ? L"Nothing": params.outputFileName.c_str())
-    //    << ", verbose " << params.verbose << std::endl;
-
     /* Prepare to start application */
     STARTUPINFO startUp;
     GetStartupInfo(&startUp);
 
     /* Start program in paused state */
     PROCESS_INFORMATION procInfo;
-    if (!CreateProcess(NULL, const_cast<LPWSTR>(params.cmdLine.c_str()), NULL, NULL, TRUE,
+    if (!CreateProcess(params.progName.c_str(), const_cast<LPWSTR>(params.cmdLine.c_str()), NULL, NULL, TRUE,
         CREATE_SUSPENDED | NORMAL_PRIORITY_CLASS, NULL, NULL, &startUp, &procInfo)) {
         std::wcerr << L"Unable to start the process: "
             << GetLastErrorDescription() << std::endl;
