@@ -41,7 +41,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 /* Get a human-readable description of the last error.
    Kinda like POSIX's strerror() */
-std::wstring GetLastErrorDescription() {
+static std::wstring GetLastErrorDescription() {
     DWORD errcode = GetLastError();
     if (errcode == 0) return std::wstring();
 
@@ -57,7 +57,16 @@ std::wstring GetLastErrorDescription() {
     return message;
 }
 
-void UsageAndExit(wchar_t *argv[]) {
+/* Return true if s contains path to BAT file */
+static bool IsBatFile(const std::wstring &s) {
+    // XXX I cannot seem to invent a proper way to decide
+    // if the file is a batch script. Use a name heuristic
+    if (s.rfind(L".bat") == s.length() - 4)
+        return true;
+    return false;
+}
+
+static void UsageAndExit(wchar_t *argv[]) {
     std::wcerr <<
         "chronos - report wallclock, user and system times of process\n"
         "Copyright (c) 2016, Grigory Rechistov\n\n" 
@@ -81,7 +90,7 @@ struct CliParams {
 
 /* Returns true on success, false if parsing failed */
 /* BUG: may not handle quoted arguments and spaces in them as a whole */
-bool ParseArgv(int argc, wchar_t *argv[], CliParams &result) {
+static bool ParseArgv(int argc, wchar_t *argv[], CliParams &result) {
     assert(argc >= 1);
     argv++;
     argc--;
@@ -156,15 +165,11 @@ bool ParseArgv(int argc, wchar_t *argv[], CliParams &result) {
     }
 
     result.progName = arguments[argNo];
-
     result.cmdLine = result.progName;
     /* Concatenate all arguments into one line */
     for (int i = argNo + 1; i < argc; i++) {
         result.cmdLine += L" " + arguments[i];
     }
-    /* For BAT files, the program name should be "cmd.exe /c",
-     otherwise it might not work correctly */
-    // TODO
     return true;
 }
 
@@ -183,8 +188,22 @@ int wmain(int argc, wchar_t* argv[]) {
 
     /* Start program in paused state */
     PROCESS_INFORMATION procInfo;
-    if (!CreateProcess(params.progName.c_str(), const_cast<LPWSTR>(params.cmdLine.c_str()), NULL, NULL, TRUE,
-        CREATE_SUSPENDED | NORMAL_PRIORITY_CLASS, NULL, NULL, &startUp, &procInfo)) {
+    const wchar_t *programNamePtr = NULL;
+
+    if (IsBatFile(params.progName)) {
+        /* Running batch files is unnecessarily tricky.
+           Leave parsing of command line arguments to the system.
+           The drawback - potential security problem for program names
+           with spaces */
+        programNamePtr = NULL;
+    } else {
+        programNamePtr = params.progName.c_str();
+    }
+    if (!CreateProcess(programNamePtr, 
+            const_cast<LPWSTR>(params.cmdLine.c_str()),
+            NULL, NULL, TRUE,
+            CREATE_SUSPENDED | NORMAL_PRIORITY_CLASS, 
+            NULL, NULL, &startUp, &procInfo)) {
         std::wcerr << L"Unable to start the process: "
             << GetLastErrorDescription() << std::endl;
         return 127;
