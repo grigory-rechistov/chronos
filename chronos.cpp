@@ -163,7 +163,6 @@ static bool ParseArgv(int argc, wchar_t *argv[], CliParams &result) {
         std::wcerr << "Missing program name" << std::endl;
         return false;
     }
-
     result.progName = arguments[argNo];
     result.cmdLine = result.progName;
     /* Concatenate all arguments into one line */
